@@ -2,7 +2,8 @@ package memory
 
 import (
 	"Fitness-tracker/internal/model"
-	"errors"
+	"Fitness-tracker/internal/repository"
+	"fmt"
 	"sync"
 )
 
@@ -35,7 +36,7 @@ func (r *UserRepository) GetByID(id int64) (*model.User, error) {
 
 	user, exists := r.users[id]
 	if !exists {
-		return nil, errors.New("user not found")
+		return nil, fmt.Errorf("user not found: %w", repository.ErrNotFound)
 	}
 
 	return user, nil
@@ -47,7 +48,7 @@ func (r *UserRepository) Update(user *model.User) error {
 
 	_, exists := r.users[user.ID]
 	if !exists {
-		return errors.New("user not found")
+		return fmt.Errorf("user not found: %w", repository.ErrNotFound)
 	}
 
 	r.users[user.ID] = user

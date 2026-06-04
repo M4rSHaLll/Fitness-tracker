@@ -18,14 +18,15 @@ func NewRouter(h *handler.Handler) http.Handler {
 	r.Get("/users/{id}", h.GetUser)
 	r.Patch("/users/{id}", h.UpdateUser)
 
-	// r.Post("/workouts", h.CreateWorkout)
-	// r.Get("/users/{id}/workouts", h.GetWorkout)
-	// r.Delete("/users/{id}/workouts", h.DeleteWorkout)
+	r.Post("/workouts", h.CreateWorkout)
+	r.Get("/users/{id}/workouts", h.GetWorkouts)
+	r.Delete("/workouts/{id}", h.DeleteWorkout)
 
-	// r.Post("/sets", h.CreateSet)
-	// r.Get("/workouts/{id}/sets", h.GetSets)
+	r.Post("/sets", h.CreateSet)
+	r.Get("/workouts/{id}/sets", h.GetSets)
+	r.Delete("/sets/{id}", h.DeleteSet)
 
-	// r.Get("/users/{id}/stats", h.GetStats)
+	r.Get("/users/{id}/stats", h.GetStats)
 
 	return r
 

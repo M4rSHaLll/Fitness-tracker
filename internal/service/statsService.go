@@ -12,6 +12,7 @@ const WeightIncrement = 2.5
 type StatsService struct {
 	workoutRepo repository.WorkoutRepository
 	setRepo     repository.SetRepository
+	userRepo    repository.UserRepository
 }
 
 type UserStats struct {
@@ -20,14 +21,22 @@ type UserStats struct {
 	AverageRPE    float64 `json:"average_rpe"`
 }
 
-func NewStatsService(setRepo repository.SetRepository, workoutRepo repository.WorkoutRepository) *StatsService {
+func NewStatsService(setRepo repository.SetRepository, workoutRepo repository.WorkoutRepository, userRepo repository.UserRepository) *StatsService {
 	return &StatsService{
 		workoutRepo: workoutRepo,
 		setRepo:     setRepo,
+		userRepo:    userRepo,
 	}
 }
 
 func (s *StatsService) GetUserStats(userID int64) (*UserStats, error) {
+	if _, err := s.userRepo.GetByID(userID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve user: %w", err)
+	}
+
 	workouts, err := s.workoutRepo.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve workouts: %w", err)

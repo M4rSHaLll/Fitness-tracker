@@ -5,30 +5,35 @@ import (
 	"Fitness-tracker/internal/repository/memory"
 	"Fitness-tracker/internal/router"
 	"Fitness-tracker/internal/service"
-	"fmt"
+	"log"
 	"net/http"
 )
 
 func main() {
 
 	userRepo := memory.NewUserRepository()
+	workoutRepo := memory.NewWorkoutRepository()
+	setRepo := memory.NewSetRepository()
 
-	userService := service.NewUserService(
-		userRepo,
-	)
+	userService := service.NewUserService(userRepo)
+
+	workoutService := service.NewWorkoutService(workoutRepo, userRepo)
+
+	setService := service.NewSetService(setRepo, workoutRepo)
+
+	statsService := service.NewStatsService(setRepo, workoutRepo, userRepo)
 
 	h := handler.NewHandler(
 		userService,
-		nil,
-		nil,
-	)
+		workoutService,
+		setService,
+		statsService)
 
 	r := router.NewRouter(h)
 
-	fmt.Println("server started on :8080")
+	log.Println("server started on :8080")
 
-	err := http.ListenAndServe(":8080", r)
-	if err != nil {
-		panic(err)
+	if err := http.ListenAndServe(":8080", r); err != nil {
+		log.Fatal(err)
 	}
 }

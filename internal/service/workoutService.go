@@ -2,25 +2,32 @@ package service
 
 import (
 	"Fitness-tracker/internal/model"
-	"fmt"
-
 	"Fitness-tracker/internal/repository"
 	"errors"
+	"fmt"
 )
 
 type WorkoutService struct {
-	repo repository.WorkoutRepository
+	repo     repository.WorkoutRepository
+	userRepo repository.UserRepository
 }
 
-func NewWorkoutService(repo repository.WorkoutRepository) *WorkoutService {
+func NewWorkoutService(repo repository.WorkoutRepository, userRepo repository.UserRepository) *WorkoutService {
 	return &WorkoutService{
-		repo: repo,
+		repo:     repo,
+		userRepo: userRepo,
 	}
 }
 
 func (s *WorkoutService) CreateWorkout(userID int64, description string) (*model.Workout, error) {
 	if description == "" {
-		return nil, errors.New("description is empty")
+		return nil, fmt.Errorf("%w: description is empty", ErrInvalidInput)
+	}
+	if _, err := s.userRepo.GetByID(userID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("can't get user: %w", err)
 	}
 
 	workout := model.NewWorkout(userID, description)
@@ -34,12 +41,22 @@ func (s *WorkoutService) CreateWorkout(userID int64, description string) (*model
 
 func (s *WorkoutService) DeleteWorkout(id int64) error {
 	if err := s.repo.Delete(id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrWorkoutNotFound
+		}
 		return fmt.Errorf("can't delete workout: %w", err)
 	}
 	return nil
 }
 
-func (s *WorkoutService) GetUserWorkouts(userID int64) ([]model.Workout, error) {
+func (s *WorkoutService) GetUserWorkouts(userID int64) ([]*model.Workout, error) {
+	if _, err := s.userRepo.GetByID(userID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("can't get user: %w", err)
+	}
+
 	workouts, err := s.repo.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("can't get user workouts: %w", err)
