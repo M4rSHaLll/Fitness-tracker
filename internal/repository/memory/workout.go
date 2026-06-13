@@ -4,6 +4,7 @@ import (
 	"Fitness-tracker/internal/model"
 	"Fitness-tracker/internal/repository"
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -52,6 +53,9 @@ func (r *WorkoutRepository) GetByUserID(userID int64) ([]*model.Workout, error) 
 			userWorkouts = append(userWorkouts, workout)
 		}
 	}
+	sort.Slice(userWorkouts, func(i, j int) bool {
+		return userWorkouts[i].ID < userWorkouts[j].ID
+	})
 
 	return userWorkouts, nil
 }

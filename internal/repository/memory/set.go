@@ -4,6 +4,7 @@ import (
 	"Fitness-tracker/internal/model"
 	"Fitness-tracker/internal/repository"
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -40,6 +41,9 @@ func (r *SetRepository) GetByWorkoutID(workoutID int64) ([]*model.Set, error) {
 			workoutSets = append(workoutSets, set)
 		}
 	}
+	sort.Slice(workoutSets, func(i, j int) bool {
+		return workoutSets[i].ID < workoutSets[j].ID
+	})
 
 	return workoutSets, nil
 }

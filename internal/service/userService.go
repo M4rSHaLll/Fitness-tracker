@@ -6,6 +6,8 @@ import (
 	"Fitness-tracker/internal/validation"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 )
 
 type UserService struct {
@@ -19,7 +21,7 @@ func NewUserService(repo repository.UserRepository) *UserService {
 }
 
 func (s *UserService) CreateUser(telegramID int64, username string) (*model.User, error) {
-	//validate and use repo.Create
+	username = strings.TrimSpace(username)
 	if username == "" {
 		return nil, fmt.Errorf("%w: username is required", ErrInvalidInput)
 	}
@@ -31,6 +33,9 @@ func (s *UserService) CreateUser(telegramID int64, username string) (*model.User
 
 	err := s.repo.Create(user)
 	if err != nil {
+		if errors.Is(err, repository.ErrAlreadyExists) {
+			return nil, ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("can't create new user: %w", err)
 	}
 
@@ -73,10 +78,14 @@ func (s *UserService) UpdateProfile(userID int64, weight, height float64, age in
 	user.Age = age
 	user.Height = height
 	user.Weight = weight
+	user.UpdatedAt = time.Now()
 
 	err = s.repo.Update(user)
 
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrUserNotFound
+		}
 		return fmt.Errorf("can't update user profile: %w", err)
 	}
 

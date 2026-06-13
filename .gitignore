@@ -1,0 +1,18 @@
+# Go build artifacts
+/Fitness-tracker
+/Fitness-tracker.exe
+/telegram
+/cmd/telegram/telegram
+/cmd/telegram/telegram.exe
+/bin/
+*.exe
+
+# Go test artifacts
+*.test
+coverage.out
+*.cover
+/coverage/
+
+# Local environment
+.env
+.env.local

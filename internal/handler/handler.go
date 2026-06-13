@@ -5,7 +5,6 @@ import (
 	"Fitness-tracker/internal/dto/response"
 	"Fitness-tracker/internal/service"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -13,18 +12,20 @@ import (
 )
 
 type Handler struct {
-	userService    *service.UserService
-	workoutService *service.WorkoutService
-	setService     *service.SetService
-	statsService   *service.StatsService
+	userService     *service.UserService
+	workoutService  *service.WorkoutService
+	setService      *service.SetService
+	statsService    *service.StatsService
+	exerciseService *service.ExerciseService
 }
 
-func NewHandler(userService *service.UserService, workoutService *service.WorkoutService, setService *service.SetService, statsService *service.StatsService) *Handler {
+func NewHandler(userService *service.UserService, workoutService *service.WorkoutService, setService *service.SetService, statsService *service.StatsService, exerciseService *service.ExerciseService) *Handler {
 	return &Handler{
-		userService:    userService,
-		workoutService: workoutService,
-		setService:     setService,
-		statsService:   statsService,
+		userService:     userService,
+		workoutService:  workoutService,
+		setService:      setService,
+		statsService:    statsService,
+		exerciseService: exerciseService,
 	}
 }
 
@@ -34,24 +35,14 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req request.CreateUser
 
 	if err := decoderJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid request body",
-		})
+		writeBadRequest(w, "Invalid request body")
 		return
 	}
 
 	user, err := h.userService.CreateUser(req.TelegramID, req.Username)
 
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidInput) {
-			writeJSON(w, http.StatusBadRequest, response.Error{
-				Error: "Invalid user data",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to create user",
-		})
+		writeServiceError(w, err, "Failed to create user")
 		return
 	}
 
@@ -59,6 +50,8 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		ID:         user.ID,
 		TelegramID: user.TelegramID,
 		Username:   user.Username,
+		CreatedAt:  user.CreatedAt,
+		UpdatedAt:  user.UpdatedAt,
 	}
 
 	writeJSON(w, http.StatusCreated, resp)
@@ -68,23 +61,13 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid user ID",
-		})
+		writeBadRequest(w, "Invalid user ID")
 		return
 	}
 
 	user, err := h.userService.GetUserByID(userID)
 	if err != nil {
-		if !errors.Is(err, service.ErrUserNotFound) {
-			writeJSON(w, http.StatusInternalServerError, response.Error{
-				Error: "Failed to get user",
-			})
-			return
-		}
-		writeJSON(w, http.StatusNotFound, response.Error{
-			Error: "User not found",
-		})
+		writeServiceError(w, err, "Failed to get user")
 		return
 	}
 
@@ -92,6 +75,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		ID:         user.ID,
 		TelegramID: user.TelegramID,
 		Username:   user.Username,
+		CreatedAt:  user.CreatedAt,
+		UpdatedAt:  user.UpdatedAt,
 		Weight:     user.Weight,
 		Height:     user.Height,
 		Age:        user.Age,
@@ -106,44 +91,115 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid user ID",
-		})
+		writeBadRequest(w, "Invalid user ID")
 		return
 	}
 
 	var req request.UpdateUser
 
 	if err := decoderJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid request body",
-		})
+		writeBadRequest(w, "Invalid request body")
 		return
 	}
 
 	err = h.userService.UpdateProfile(userID, req.Weight, req.Height, req.Age)
 
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "User not found",
-			})
-			return
-		}
-		if errors.Is(err, service.ErrInvalidInput) {
-			writeJSON(w, http.StatusBadRequest, response.Error{
-				Error: "Invalid user data",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to update user",
-		})
+		writeServiceError(w, err, "Failed to update user")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "user updated successfully",
+	})
+}
+
+func (h *Handler) CreateExercise(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var req request.CreateExercise
+
+	if err := decoderJSON(r, &req); err != nil {
+		writeBadRequest(w, "Invalid request body")
+		return
+	}
+
+	exercise, err := h.exerciseService.CreateExercise(req.Name)
+	if err != nil {
+		writeServiceError(w, err, "Failed to create exercise")
+		return
+	}
+
+	resp := response.Exercise{
+		ID:        exercise.ID,
+		Name:      exercise.Name,
+		CreatedAt: exercise.CreatedAt,
+		UpdatedAt: exercise.UpdatedAt,
+	}
+
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (h *Handler) GetExercise(w http.ResponseWriter, r *http.Request) {
+	exerciseID, err := parseID(r, "id")
+
+	if err != nil {
+		writeBadRequest(w, "Invalid exercise ID")
+		return
+	}
+
+	exercise, err := h.exerciseService.GetExerciseByID(exerciseID)
+	if err != nil {
+		writeServiceError(w, err, "Failed to get exercise")
+		return
+	}
+
+	resp := response.Exercise{
+		ID:        exercise.ID,
+		Name:      exercise.Name,
+		CreatedAt: exercise.CreatedAt,
+		UpdatedAt: exercise.UpdatedAt,
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) GetExercises(w http.ResponseWriter, r *http.Request) {
+	exercises, err := h.exerciseService.GetExercises()
+	if err != nil {
+		writeServiceError(w, err, "Failed to get exercises")
+		return
+	}
+
+	resp := make([]response.Exercise, 0, len(exercises))
+
+	for _, exercise := range exercises {
+		resp = append(resp, response.Exercise{
+			ID:        exercise.ID,
+			Name:      exercise.Name,
+			CreatedAt: exercise.CreatedAt,
+			UpdatedAt: exercise.UpdatedAt,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) DeleteExercise(w http.ResponseWriter, r *http.Request) {
+	exerciseID, err := parseID(r, "id")
+
+	if err != nil {
+		writeBadRequest(w, "Invalid exercise ID")
+		return
+	}
+
+	if err := h.exerciseService.DeleteExercise(exerciseID); err != nil {
+		writeServiceError(w, err, "Failed to delete exercise")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "exercise deleted successfully",
 	})
 }
 
@@ -153,30 +209,14 @@ func (h *Handler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 	var req request.CreateWorkout
 
 	if err := decoderJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid request body",
-		})
+		writeBadRequest(w, "Invalid request body")
 		return
 	}
 
 	workout, err := h.workoutService.CreateWorkout(req.UserID, req.Description)
 
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "User not found",
-			})
-			return
-		}
-		if errors.Is(err, service.ErrInvalidInput) {
-			writeJSON(w, http.StatusBadRequest, response.Error{
-				Error: "Invalid workout data",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to create workout",
-		})
+		writeServiceError(w, err, "Failed to create workout")
 		return
 	}
 
@@ -194,24 +234,14 @@ func (h *Handler) GetWorkouts(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid user ID",
-		})
+		writeBadRequest(w, "Invalid user ID")
 		return
 	}
 
 	workouts, err := h.workoutService.GetUserWorkouts(userID)
 
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "User not found",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to get workouts",
-		})
+		writeServiceError(w, err, "Failed to get workouts")
 		return
 	}
 
@@ -232,24 +262,14 @@ func (h *Handler) DeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	workoutID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid workout ID",
-		})
+		writeBadRequest(w, "Invalid workout ID")
 		return
 	}
 
 	err = h.workoutService.DeleteWorkout(workoutID)
 
 	if err != nil {
-		if errors.Is(err, service.ErrWorkoutNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "Workout not found",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to delete workout",
-		})
+		writeServiceError(w, err, "Failed to delete workout")
 		return
 	}
 
@@ -264,30 +284,14 @@ func (h *Handler) CreateSet(w http.ResponseWriter, r *http.Request) {
 	var req request.CreateSet
 
 	if err := decoderJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid request body",
-		})
+		writeBadRequest(w, "Invalid request body")
 		return
 	}
 
 	set, err := h.setService.CreateSet(req.ExerciseID, req.WorkoutID, req.Reps, req.Weight, req.RPE)
 
 	if err != nil {
-		if errors.Is(err, service.ErrWorkoutNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "Workout not found",
-			})
-			return
-		}
-		if errors.Is(err, service.ErrInvalidInput) {
-			writeJSON(w, http.StatusBadRequest, response.Error{
-				Error: "Invalid set data",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to create set",
-		})
+		writeServiceError(w, err, "Failed to create set")
 		return
 	}
 
@@ -308,24 +312,14 @@ func (h *Handler) GetSets(w http.ResponseWriter, r *http.Request) {
 	workoutID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid workout ID",
-		})
+		writeBadRequest(w, "Invalid workout ID")
 		return
 	}
 
 	sets, err := h.setService.GetWorkoutSets(workoutID)
 
 	if err != nil {
-		if errors.Is(err, service.ErrWorkoutNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "Workout not found",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to get sets",
-		})
+		writeServiceError(w, err, "Failed to get sets")
 		return
 	}
 
@@ -349,24 +343,14 @@ func (h *Handler) DeleteSet(w http.ResponseWriter, r *http.Request) {
 	setID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid set ID",
-		})
+		writeBadRequest(w, "Invalid set ID")
 		return
 	}
 
 	err = h.setService.DeleteSet(setID)
 
 	if err != nil {
-		if errors.Is(err, service.ErrSetNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "Set not found",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to delete set",
-		})
+		writeServiceError(w, err, "Failed to delete set")
 		return
 	}
 
@@ -380,24 +364,14 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseID(r, "id")
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, response.Error{
-			Error: "Invalid user ID",
-		})
+		writeBadRequest(w, "Invalid user ID")
 		return
 	}
 
 	stats, err := h.statsService.GetUserStats(userID)
 
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			writeJSON(w, http.StatusNotFound, response.Error{
-				Error: "User not found",
-			})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, response.Error{
-			Error: "Failed to get stats",
-		})
+		writeServiceError(w, err, "Failed to get stats")
 		return
 	}
 

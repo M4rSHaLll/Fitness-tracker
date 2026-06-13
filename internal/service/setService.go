@@ -9,14 +9,16 @@ import (
 )
 
 type SetService struct {
-	repo        repository.SetRepository
-	workoutRepo repository.WorkoutRepository
+	repo         repository.SetRepository
+	workoutRepo  repository.WorkoutRepository
+	exerciseRepo repository.ExerciseRepository
 }
 
-func NewSetService(repo repository.SetRepository, workoutRepo repository.WorkoutRepository) *SetService {
+func NewSetService(repo repository.SetRepository, workoutRepo repository.WorkoutRepository, exerciseRepo repository.ExerciseRepository) *SetService {
 	return &SetService{
-		repo:        repo,
-		workoutRepo: workoutRepo,
+		repo:         repo,
+		workoutRepo:  workoutRepo,
+		exerciseRepo: exerciseRepo,
 	}
 }
 
@@ -36,6 +38,12 @@ func (s *SetService) CreateSet(exerciseID, workoutID int64, reps int64, weight, 
 			return nil, ErrWorkoutNotFound
 		}
 		return nil, fmt.Errorf("can't get workout: %w", err)
+	}
+	if _, err := s.exerciseRepo.GetByID(exerciseID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrExerciseNotFound
+		}
+		return nil, fmt.Errorf("can't get exercise: %w", err)
 	}
 
 	set := model.NewSet(exerciseID, workoutID, reps, weight, rpe)
