@@ -1,12 +1,55 @@
 # Fitness Tracker
 
-API для хранения пользователей, упражнений, тренировок, подходов и расчета базовой статистики.
+Backend MVP для учета силовых тренировок через REST API и Telegram-бота.
 
-Текущая версия использует in-memory хранилище. Оно подходит для локальной разработки и тестов, но данные теряются после перезапуска приложения.
+Основное хранилище проекта — PostgreSQL. In-memory реализация сохранена для быстрых локальных тестов.
+HTTP API и Telegram-бот запускаются одним приложением.
+
+## Возможности
+
+- профили пользователей, упражнения, тренировки и подходы;
+- статистика по количеству тренировок, объему и среднему RPE;
+- RPE от `6` до `10` с шагом `0.5`;
+- Telegram-сценарий без ручного ввода внутренних ID;
+- PostgreSQL через `pgx`, SQL-миграции и in-memory адаптер;
+- Docker Compose для приложения, миграций и PostgreSQL;
+- graceful shutdown и повторное подключение Telegram polling;
+- Bearer-защита REST API и отдельный токен внутренних Telegram-маршрутов;
+- unit-, HTTP- и PostgreSQL integration-тесты;
+- CI с race detector и проверкой Docker-сборки.
+
+## Архитектура
+
+```mermaid
+flowchart LR
+    Client["REST client"] --> Router["chi router"]
+    Telegram["Telegram user"] --> Bot["Telegram bot polling"]
+    Router --> Handler["HTTP handlers"]
+    Handler --> Service["Services"]
+    Bot --> Service
+    Service --> Repository["Repository interfaces"]
+    Repository --> PG["PostgreSQL repositories"]
+    Repository --> Memory["In-memory repositories"]
+```
+
+Основной поток API: `router → handler → service → repository`.
+Бот использует те же сервисы напрямую, поэтому бизнес-правила не дублируются.
+
+## Модель доступа
+
+- `GET /health` доступен без авторизации.
+- Обычные REST-маршруты защищены `Authorization: Bearer <API_TOKEN>`.
+- Маршруты `/telegram/...` защищены отдельным заголовком `X-Internal-Token`.
+- Бот берет Telegram ID только из `update.Message.From.ID`.
+- При добавлении подхода проверяется принадлежность тренировки текущему пользователю.
+
+`API_TOKEN` — операторский ключ для локальной разработки и закрытого API. Это не полноценная пользовательская аутентификация для публичного web/mobile-клиента.
 
 ## Конфигурация
 
-Приложение читает конфигурацию из переменных окружения. Файл `.env.example` содержит пример значений, но `.env` не загружается приложением автоматически.
+Приложение читает конфигурацию из переменных окружения и локального файла `.env`.
+Системные переменные имеют приоритет над значениями из `.env`.
+Файл `.env` игнорируется Git и не должен попадать в репозиторий.
 
 Текущие переменные:
 
@@ -14,6 +57,10 @@ API для хранения пользователей, упражнений, т
 - `APP_HOST`: host для HTTP-сервера. По умолчанию пустая строка, сервер слушает все интерфейсы.
 - `APP_PORT`: порт HTTP-сервера. По умолчанию `8080`.
 - `STORAGE_DRIVER`: тип хранилища. Поддерживаются `memory` и `postgres`.
+- `API_TOKEN`: Bearer-токен обычного REST API.
+- `INTERNAL_API_TOKEN`: токен внутренних маршрутов `/telegram/...`.
+- `TELEGRAM_BOT_TOKEN`: секретный токен BotFather.
+- `TELEGRAM_MODE`: режим бота, сейчас поддерживается `polling`.
 
 Переменные PostgreSQL:
 
@@ -33,39 +80,91 @@ $env:STORAGE_DRIVER = "memory"
 go run ./cmd/telegram
 ```
 
-## Запуск
+## Локальный запуск
 
-```bash
+```powershell
+Copy-Item .env.example .env
 go run ./cmd/telegram
 ```
 
 Сервер запускается на `http://localhost:8080`.
 
-## PostgreSQL
+## Запуск в Docker
 
-Для локального запуска PostgreSQL:
+Заполните в `.env` токены API и новый токен бота:
 
-```bash
+```env
+API_TOKEN=long-random-api-token
+INTERNAL_API_TOKEN=long-random-internal-token
+TELEGRAM_BOT_TOKEN=token-from-botfather
+```
+
+Не публикуйте `.env` и не передавайте токен в сообщениях или логах.
+
+Полный стек запускается одной командой:
+
+```powershell
+docker compose up --build
+```
+
+Compose последовательно:
+
+- запускает PostgreSQL;
+- применяет миграции;
+- запускает API и Telegram polling.
+
+Проверка состояния:
+
+```powershell
+docker compose ps
+docker compose logs -f app
+curl.exe http://localhost:8080/health
+```
+
+Остановка:
+
+```powershell
+docker compose down
+```
+
+Данные PostgreSQL сохраняются в volume `postgres-data`.
+Для удаления данных используется отдельная команда `docker compose down -v`.
+
+Внутри Docker приложение подключается к `postgres:5432`.
+При запуске Go-приложения на Windows используется опубликованный порт `localhost:55432`.
+
+Если Telegram API доступен только через локальный HTTP-прокси Docker Desktop, добавьте в `.env`:
+
+```env
+HTTPS_PROXY=http://host.docker.internal:7890
+```
+
+Порт должен совпадать с HTTP или mixed port прокси-программы.
+Если Telegram временно недоступен, API продолжает работать, а бот повторяет подключение каждые 15 секунд.
+
+## PostgreSQL отдельно
+
+Для запуска только базы:
+
+```powershell
 docker compose up -d postgres
 ```
 
-Перед запуском приложения с `STORAGE_DRIVER=postgres` нужно применить миграции из папки `migrations`.
+Пример ручного применения миграций:
 
-Пример с `golang-migrate`:
-
-```bash
-migrate -path migrations -database "postgres://fitness:fitness@localhost:5432/fitness_tracker?sslmode=disable" up
+```powershell
+migrate -path migrations -database "postgres://fitness:fitness@localhost:55432/fitness_tracker?sslmode=disable" up
 ```
 
-Запуск приложения с PostgreSQL в PowerShell:
+Запуск приложения на Windows с PostgreSQL:
 
 ```powershell
 $env:STORAGE_DRIVER = "postgres"
-$env:DATABASE_URL = "postgres://fitness:fitness@localhost:5432/fitness_tracker?sslmode=disable"
+$env:DATABASE_URL = "postgres://fitness:fitness@localhost:55432/fitness_tracker?sslmode=disable"
 go run ./cmd/telegram
 ```
 
-Для возврата к тестовому in-memory хранилищу:
+Для возврата к in-memory хранилищу:
 
 ```powershell
 $env:STORAGE_DRIVER = "memory"
@@ -154,6 +253,18 @@ go run ./cmd/telegram
 ## API
 
 Все ответы возвращаются в JSON.
+Кроме `/health`, запросы должны содержать:
+
+```http
+Authorization: Bearer long-random-api-token
+```
+
+Пример PowerShell:
+
+```powershell
+curl.exe http://localhost:8080/exercises `
+  -H "Authorization: Bearer $env:API_TOKEN"
+```
 
 ### Health
 
@@ -428,8 +539,11 @@ Response:
 Коды:
 
 - `400 Bad Request`: невалидный JSON, неизвестное поле, невалидные значения.
+- `401 Unauthorized`: отсутствует или неверен API/internal токен.
+- `403 Forbidden`: попытка обратиться к тренировке другого пользователя.
 - `404 Not Found`: пользователь, упражнение, тренировка или подход не найдены.
 - `409 Conflict`: ресурс уже существует.
+- `503 Service Unavailable`: обязательный токен не настроен.
 - `500 Internal Server Error`: внутренняя ошибка приложения.
 
 ## Проверка
@@ -447,8 +561,10 @@ make test
 PostgreSQL integration-тесты запускаются только если задан `POSTGRES_TEST_DATABASE_URL`:
 
 ```bash
-POSTGRES_TEST_DATABASE_URL="postgres://fitness:fitness@localhost:5432/fitness_tracker?sslmode=disable" go test ./internal/repository/postgres
+POSTGRES_TEST_DATABASE_URL="postgres://fitness:fitness@localhost:55432/fitness_tracker?sslmode=disable" go test ./internal/repository/postgres
 ```
+
+GitHub Actions выполняет форматирование, `go vet`, миграции, `go test -race ./...`, сборку приложения и Docker-образа.
 
 ## Makefile
 
@@ -462,3 +578,97 @@ make db-down
 make migrate-up
 make migrate-down
 ```
+
+## Внутренний Telegram API
+
+Маршруты `/telegram/...` предназначены для доверенных внутренних интеграций и защищены заголовком `X-Internal-Token`.
+
+Example:
+
+```bash
+export INTERNAL_API_TOKEN="local-secret"
+```
+
+Все запросы должны содержать:
+
+```http
+X-Internal-Token: local-secret
+```
+
+Supported endpoints:
+
+- `POST /telegram/users`
+- `POST /telegram/users/{telegram_id}/workouts`
+- `GET /telegram/users/{telegram_id}/workouts`
+- `POST /telegram/users/{telegram_id}/sets`
+- `GET /telegram/users/{telegram_id}/workouts/{workout_id}/sets`
+- `GET /telegram/users/{telegram_id}/stats`
+
+API не принимает `user_id` от Telegram-клиента: backend определяет внутреннего пользователя по `telegram_id`.
+Создание и чтение подходов также проверяют принадлежность тренировки.
+
+Create or get Telegram user:
+
+```bash
+curl -X POST http://localhost:8080/telegram/users \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Token: local-secret" \
+  -d '{"telegram_id":123456789,"username":"art"}'
+```
+
+Create workout for Telegram user:
+
+```bash
+curl -X POST http://localhost:8080/telegram/users/123456789/workouts \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Token: local-secret" \
+  -d '{"username":"art","description":"Push workout"}'
+```
+
+Create set for Telegram user:
+
+```bash
+curl -X POST http://localhost:8080/telegram/users/123456789/sets \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Token: local-secret" \
+  -d '{"workout_id":1,"exercise_id":1,"weight":100,"reps":5,"rpe":8.5}'
+```
+
+## Telegram-бот
+
+Бот работает в одном процессе с API и использует long polling.
+
+Основной пользовательский сценарий:
+
+```text
+/start
+/profile_set 80 180 30
+/exercise Bench press
+/workout Push day
+/addset
+/stats
+```
+
+После `/addset` пользователь выбирает тренировку и упражнение кнопками, затем отправляет `вес повторения RPE`, например `100 5 8.5`.
+
+Команды:
+
+- `/start` — создать или найти профиль;
+- `/profile` — показать профиль;
+- `/profile_set <вес> <рост> <возраст>` — обновить профиль;
+- `/exercises` — показать упражнения;
+- `/exercise <название>` — добавить упражнение;
+- `/workout <описание>` — создать тренировку;
+- `/workouts` — показать последние тренировки;
+- `/addset` — добавить подход с выбором кнопками;
+- `/set <workout_id> <exercise_id> <weight> <reps> <rpe>` — совместимый ручной вариант;
+- `/cancel` — отменить добавление подхода;
+- `/stats` — показать статистику.
+
+## Ограничения текущего MVP
+
+- REST API использует общий операторский токен, а не учетные записи клиентов.
+- Telegram работает только через polling; webhook пока не реализован.
+- Каталог упражнений общий для всех пользователей.
+- Для списков пока нет пагинации.
+- Метрики и распределенная трассировка не подключены.

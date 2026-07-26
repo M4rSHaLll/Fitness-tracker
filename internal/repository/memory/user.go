@@ -48,6 +48,19 @@ func (r *UserRepository) GetByID(id int64) (*model.User, error) {
 	return user, nil
 }
 
+func (r *UserRepository) GetByTelegramID(telegramID int64) (*model.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, user := range r.users {
+		if user.TelegramID == telegramID {
+			return user, nil
+		}
+	}
+
+	return nil, fmt.Errorf("user not found: %w", repository.ErrNotFound)
+}
+
 func (r *UserRepository) Update(user *model.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

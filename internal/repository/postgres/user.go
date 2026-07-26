@@ -63,6 +63,32 @@ func (r *UserRepository) GetByID(id int64) (*model.User, error) {
 	return user, nil
 }
 
+func (r *UserRepository) GetByTelegramID(telegramID int64) (*model.User, error) {
+	ctx, cancel := newQueryContext()
+	defer cancel()
+
+	user := &model.User{}
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, telegram_id, username, created_at, updated_at, weight, height, age
+		FROM users
+		WHERE telegram_id = $1
+	`, telegramID).Scan(
+		&user.ID,
+		&user.TelegramID,
+		&user.Username,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.Weight,
+		&user.Height,
+		&user.Age,
+	)
+	if err != nil {
+		return nil, mapNotFound(err, "user not found")
+	}
+
+	return user, nil
+}
+
 func (r *UserRepository) Update(user *model.User) error {
 	ctx, cancel := newQueryContext()
 	defer cancel()

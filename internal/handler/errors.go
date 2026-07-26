@@ -11,6 +11,10 @@ func writeBadRequest(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusBadRequest, response.Error{Error: message, Code: "invalid_request"})
 }
 
+func writeForbidden(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusForbidden, response.Error{Error: message, Code: "forbidden"})
+}
+
 func writeServiceError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, service.ErrInvalidInput):

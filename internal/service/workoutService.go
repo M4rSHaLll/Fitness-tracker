@@ -49,6 +49,17 @@ func (s *WorkoutService) DeleteWorkout(id int64) error {
 	return nil
 }
 
+func (s *WorkoutService) GetWorkoutByID(id int64) (*model.Workout, error) {
+	workout, err := s.repo.GetByID(id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrWorkoutNotFound
+		}
+		return nil, fmt.Errorf("can't get workout: %w", err)
+	}
+	return workout, nil
+}
+
 func (s *WorkoutService) GetUserWorkouts(userID int64) ([]*model.Workout, error) {
 	if _, err := s.userRepo.GetByID(userID); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {

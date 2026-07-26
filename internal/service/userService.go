@@ -55,6 +55,42 @@ func (s *UserService) GetUserByID(id int64) (*model.User, error) {
 	return user, nil
 }
 
+func (s *UserService) GetUserByTelegramID(telegramID int64) (*model.User, error) {
+	user, err := s.repo.GetByTelegramID(telegramID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("can't get user by telegram id: %w", err)
+	}
+
+	return user, nil
+}
+
+func (s *UserService) GetOrCreateTelegramUser(telegramID int64, username string) (*model.User, error) {
+	if telegramID <= 0 {
+		return nil, fmt.Errorf("%w: telegram_id is invalid", ErrInvalidInput)
+	}
+
+	user, err := s.GetUserByTelegramID(telegramID)
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	user, err = s.CreateUser(telegramID, username)
+	if err == nil {
+		return user, nil
+	}
+	if errors.Is(err, ErrAlreadyExists) {
+		return s.GetUserByTelegramID(telegramID)
+	}
+
+	return nil, err
+}
+
 func (s *UserService) UpdateProfile(userID int64, weight, height float64, age int64) error {
 	user, err := s.repo.GetByID(userID)
 

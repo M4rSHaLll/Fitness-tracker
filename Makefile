@@ -1,4 +1,4 @@
-DATABASE_URL ?= postgres://fitness:fitness@localhost:5432/fitness_tracker?sslmode=disable
+DATABASE_URL ?= postgres://fitness:fitness@localhost:55432/fitness_tracker?sslmode=disable
 APP_BINARY ?= bin/fitness-tracker
 
 .PHONY: run run-postgres test build db-up db-down migrate-up migrate-down

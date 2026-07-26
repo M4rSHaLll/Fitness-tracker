@@ -12,6 +12,7 @@ var ErrResourceInUse = errors.New("resource in use")
 type UserRepository interface {
 	Create(user *model.User) error
 	GetByID(id int64) (*model.User, error)
+	GetByTelegramID(telegramID int64) (*model.User, error)
 	Update(user *model.User) error
 }
 

@@ -32,6 +32,10 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	t.Setenv("STORAGE_DRIVER", "postgres")
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/db?sslmode=disable")
 	t.Setenv("DB_PORT", "5432")
+	t.Setenv("INTERNAL_API_TOKEN", "secret")
+	t.Setenv("API_TOKEN", "api-secret")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "bot-token")
+	t.Setenv("TELEGRAM_MODE", "polling")
 
 	cfg, err := Load()
 	if err != nil {
@@ -49,6 +53,18 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	}
 	if cfg.Database.Port != 5432 {
 		t.Fatalf("expected database port 5432, got %d", cfg.Database.Port)
+	}
+	if cfg.Security.InternalAPIToken != "secret" {
+		t.Fatalf("expected internal api token from env")
+	}
+	if cfg.Security.APIToken != "api-secret" {
+		t.Fatalf("expected api token from env")
+	}
+	if cfg.Telegram.BotToken != "bot-token" {
+		t.Fatalf("expected telegram bot token from env")
+	}
+	if cfg.Telegram.Mode != "polling" {
+		t.Fatalf("expected telegram mode polling, got %s", cfg.Telegram.Mode)
 	}
 }
 
@@ -113,6 +129,10 @@ func clearEnv(t *testing.T) {
 		"DB_PASSWORD",
 		"DB_NAME",
 		"DB_SSLMODE",
+		"INTERNAL_API_TOKEN",
+		"API_TOKEN",
+		"TELEGRAM_BOT_TOKEN",
+		"TELEGRAM_MODE",
 	}
 
 	for _, name := range names {
